@@ -28,9 +28,6 @@ if "jwt" not in st.session_state:
 # Ikomia Scale URL
 IKSCALE_URL=URL("https://scale.ikomia.ai")
 
-# Ikomia Scale project ID
-PROJECT_ID=""
-
 # Ikomia Scale project deployment endpoint
 ENDPOINT_URL = ""
 
@@ -57,7 +54,7 @@ class HTTPBadCodeError(Exception):
         self.content = content
 
 
-def request(session, headers, method, url, data=None):
+def request(session, headers, method, url, params=None, data=None):
 
     if data is not None:
         data = json.dumps(data)
@@ -66,7 +63,7 @@ def request(session, headers, method, url, data=None):
         method=method,
         url=url,
         headers=headers,
-        #            params=query,
+        params=params,
         data=data,
     )
     prepared_request = session.prepare_request(request)
@@ -239,11 +236,11 @@ def process_image(url, jwt, task_name, task_output_index, image_placeholder, ima
     if data_dict is not None:
         if type(data_dict) is dict:
             # Get base 64 encoded image and its extracted information
-            if "b64_img" in data_dict:
-                output_img = b64str_to_numpy(data_dict["b64_img"])
+            if "crop" in data_dict:
+                output_img = b64str_to_numpy(data_dict["crop"])
                 output_img = np.array(output_img[:, :, ::-1], dtype='uint8')
                 img_list.append(output_img)
-                del data_dict["b64_img"]
+                del data_dict["crop"]
             else:
                 img_list.append(None)
             json_list.append(data_dict)
@@ -251,11 +248,11 @@ def process_image(url, jwt, task_name, task_output_index, image_placeholder, ima
             # data_dict is a list, loop over elements
             for elt in data_dict:
                 # Get base 64 encoded image and its extracted information
-                if "b64_img" in elt:
-                    output_img = b64str_to_numpy(elt["b64_img"])
+                if "crop" in elt:
+                    output_img = b64str_to_numpy(elt["crop"])
                     output_img = np.array(output_img[:, :, ::-1], dtype='uint8')
                     img_list.append(output_img)
-                    del elt["b64_img"]
+                    del elt["crop"]
                 else:
                     img_list.append(None)
                 json_list.append(elt)
@@ -265,7 +262,7 @@ def process_image(url, jwt, task_name, task_output_index, image_placeholder, ima
     display_result(json_list, img_list, image_placeholder, image)
 
 
-def get_jwt(api_token, project_id):
+def get_jwt(api_token, endpoint_url):
 
     if st.session_state.jwt is None:
         session = requests.Session()
@@ -274,7 +271,7 @@ def get_jwt(api_token, project_id):
             "Authorization": f"Token {api_token}",
         }
 
-        response = request(session, headers, "GET", IKSCALE_URL / f"v1/projects/{project_id}/jwt/")
+        response = request(session, headers, "GET", IKSCALE_URL / f"v1/projects/jwt/", params={"endpoint": endpoint_url})
 
         if "id_token" in response:
             st.session_state.jwt = response["id_token"]
@@ -304,7 +301,6 @@ def demo():
 
     api_token = st.sidebar.text_input("API Token", on_change=on_token_or_project_change)
     with st.sidebar.expander("API", expanded=False):
-        project_id = st.text_input("Ikomia Project ID", value=PROJECT_ID, on_change=on_token_or_project_change)
         endpoint_url = st.text_input("API Endpoint URL", value=ENDPOINT_URL)
         task_name = st.text_input("Ikomia Task Name", value=TASK_NAME)
         task_output_index = st.number_input("Task output index", min_value=0, value=0)
@@ -322,7 +318,7 @@ def demo():
         return
 
     # Get JWT from ikscale
-    jwt = get_jwt(api_token, project_id)
+    jwt = get_jwt(api_token, endpoint_url)
 
     # Deployment Endpoint invocation
     with st.spinner("Wait for results..."):
